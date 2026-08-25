@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111a1f" />
+    <title>Artflow · Fire Tower</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Artflow 首页">Artflow</a>
+        <nav aria-label="当前位置" class="breadcrumbs">
+          <span>UnamedTactics Demo</span><span aria-hidden="true">/</span><span>建筑</span><span aria-hidden="true">/</span><strong>Fire Tower</strong>
+        </nav>
+        <div class="local-state"><span class="status-dot" aria-hidden="true"></span>本地工作台</div>
+      </header>
+
+      <aside class="sidebar">
+        <section>
+          <p class="eyebrow">项目</p>
+          <div class="project-name">UnamedTactics Demo</div>
+          <p class="muted">本地项目适配器</p>
+        </section>
+        <section class="asset-nav" aria-label="资产列表">
+          <p class="eyebrow">资产</p>
+          <div class="nav-group">
+            <div class="nav-group-title">建筑</div>
+            <button class="asset-choice is-selected" type="button" aria-current="page">
+              <img class="mini-tower" src="/artifact/runtime" alt="" />
+              <span>Fire Tower</span>
+              <span id="railStatus" class="choice-status" aria-label="状态"></span>
+            </button>
+          </div>
+          <div class="nav-group is-muted">
+            <div class="nav-group-title">单位 <span>稍后接入</span></div>
+            <div class="nav-group-title">地块 <span>稍后接入</span></div>
+            <div class="nav-group-title">效果与 UI <span>稍后接入</span></div>
+          </div>
+        </section>
+        <section class="sidebar-note">
+          <p>一期受控生产模式</p>
+          <span>候选生成、人工门禁、正式源提升与运行时导出均由白名单命令执行。</span>
+        </section>
+      </aside>
+
+      <section class="workspace" aria-live="polite">
+        <div class="asset-heading">
+          <div>
+            <p class="eyebrow">静态建筑 · canary</p>
+            <h1>Fire Tower <span id="assetState" class="state-pill">加载中</span></h1>
+            <p id="assetSubtitle" class="muted">正在读取项目合同与产物。</p>
+            <p id="verifiedVersion" class="run-summary">尚无已验证版本。</p>
+          </div>
+          <div class="heading-actions">
+            <button id="diagnoseEnvironmentButton" class="button button-secondary" type="button">诊断环境</button>
+            <button id="verifyButton" class="button button-secondary" type="button">验证建筑合同</button>
+            <button id="normalizeCandidateButton" class="button button-secondary" type="button">生成硬 Alpha…</button>
+            <button id="buildCandidateButton" class="button button-secondary" type="button">生成候选源…</button>
+            <button id="promoteCandidateButton" class="button button-secondary" type="button">提升正式源…</button>
+            <button id="exportButton" class="button button-secondary" type="button">导出运行时 PNG…</button>
+            <button id="verifyVisualsButton" class="button button-secondary" type="button">严格视觉验证</button>
+            <button id="dryRunButton" class="button button-primary" type="button">运行 dry-run</button>
+          </div>
+        </div>
+
+        <div class="workspace-grid">
+          <section class="preview-panel" aria-labelledby="previewTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">预览</p>
+                <h2 id="previewTitle">固定棋盘预览</h2>
+              </div>
+              <div class="preview-toolbar">
+                <div class="zoom-controls" aria-label="预览缩放">
+                  <button id="zoomOutButton" class="icon-button" type="button" aria-label="缩小预览">−</button>
+                  <button id="fitPreviewButton" class="plain-button" type="button">适配视图</button>
+                  <button id="zoomInButton" class="icon-button" type="button" aria-label="放大预览">+</button>
+                </div>
+                <div class="background-controls" role="group" aria-label="预览背景色">
+                  <span>背景</span>
+                  <button class="background-choice is-active" type="button" data-background="white" aria-pressed="true">白</button>
+                  <button class="background-choice" type="button" data-background="black" aria-pressed="false">黑</button>
+                </div>
+                <div class="view-tabs" role="tablist" aria-label="预览类型">
+                  <button class="tab is-active" type="button" data-preview="board" role="tab" aria-selected="true">棋盘</button>
+                  <button class="tab" type="button" data-preview="hard_alpha" role="tab" aria-selected="false">硬 Alpha</button>
+                  <button class="tab" type="button" data-preview="candidate" role="tab" aria-selected="false">候选源</button>
+                  <button class="tab" type="button" data-preview="runtime" role="tab" aria-selected="false">运行时 PNG</button>
+                  <button class="tab" type="button" data-preview="review" role="tab" aria-selected="false">2× 审阅</button>
+                </div>
+              </div>
+            </div>
+            <figure id="previewViewport" class="art-preview" data-background="white" tabindex="0" aria-label="可拖动、可缩放的 Fire Tower 预览">
+              <div id="previewStage" class="preview-stage">
+              <img id="previewImage" alt="Fire Tower 固定棋盘预览" />
+              </div>
+              <figcaption id="previewCaption">读取中</figcaption>
+            </figure>
+            <p class="preview-help">拖动查看不同区域 · 滚轮或缩放按钮调整视图 · 白/黑背景用于检查透明 PNG · 按“适配视图”恢复完整画面</p>
+            <div class="geometry-row">
+              <div><span>画布</span><strong id="canvasValue">—</strong></div>
+              <div><span>脚点</span><strong id="anchorValue">—</strong></div>
+              <div><span>Alpha 边界</span><strong id="alphaValue">—</strong></div>
+            </div>
+          </section>
+
+          <section class="evidence-panel" aria-labelledby="evidenceTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">验证证据</p>
+                <h2 id="evidenceTitle">合同与产物</h2>
+              </div>
+              <button id="refreshButton" class="plain-button" type="button">刷新</button>
+            </div>
+            <dl class="contract-summary" id="contractSummary"></dl>
+            <div class="artifact-list" id="artifactList"></div>
+            <details class="snapshot-details">
+              <summary>运行快照</summary>
+              <pre id="snapshotOutput">尚未读取。</pre>
+            </details>
+          </section>
+        </div>
+
+        <section class="pipeline-panel" aria-labelledby="pipelineTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">生产流程</p>
+              <h2 id="pipelineTitle">Fire Tower canary</h2>
+            </div>
+            <div class="pipeline-actions">
+              <span id="pipelineStatus" class="state-pill is-warning">未校验</span>
+              <button id="validatePipelineButton" class="plain-button" type="button">校验管线</button>
+              <span class="muted">点击步骤查看其输入和边界</span>
+            </div>
+          </div>
+          <ol id="pipelineSteps" class="pipeline-steps"></ol>
+          <article id="stepDetail" class="step-detail" aria-live="polite"></article>
+        </section>
+
+        <section class="result-panel" aria-labelledby="resultTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">运行记录</p>
+              <h2 id="resultTitle">等待操作</h2>
+            </div>
+            <span id="resultStatus" class="state-pill">只读</span>
+          </div>
+          <p id="resultLead" class="muted">dry-run 只展开流程计划；单独的合同验证会执行完整 <code>artctl verify buildings</code>。</p>
+          <pre id="resultOutput">尚未执行命令。</pre>
+        </section>
+        <section class="run-panel" aria-labelledby="runTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">本机运行账本</p>
+              <h2 id="runTitle">最新运行</h2>
+            </div>
+            <div class="pipeline-actions">
+              <span id="runState" class="state-pill is-warning">未运行</span>
+              <button id="retryExportButton" class="plain-button" type="button" hidden>从合同验证重试</button>
+            </div>
+          </div>
+          <p id="runLead" class="muted">导出并通过严格视觉验证后，会在此记录完整的可追溯版本。</p>
+          <details class="run-details">
+            <summary>查看步骤、哈希与日志</summary>
+            <pre id="runOutput">尚无运行记录。</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+    <template id="artifactTemplate">
+      <article class="artifact-row">
+        <div class="artifact-copy">
+          <strong class="artifact-label"></strong>
+          <span class="artifact-path"></span>
+          <span class="artifact-hash"></span>
+        </div>
+        <a class="artifact-open" target="_blank" rel="noreferrer">查看</a>
+      </article>
+    </template>
+    <dialog id="exportDialog" class="export-dialog" aria-labelledby="exportDialogTitle">
+      <form id="exportForm" novalidate>
+        <p class="eyebrow">写入确认</p>
+        <h2 id="exportDialogTitle">导出 Fire Tower 运行时 PNG</h2>
+        <p>将先检查环境和建筑合同；检查通过后，使用当前 Aseprite 源重新生成并覆写游戏运行时 PNG。</p>
+        <label for="exportConfirmation">输入 <code>fire_tower</code> 确认</label>
+        <input id="exportConfirmation" name="confirmation" type="text" autocomplete="off" spellcheck="false" />
+        <p id="exportConfirmationError" class="form-error" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancelExportButton" class="button button-secondary" type="button">取消</button>
+          <button id="confirmExportButton" class="button button-primary" type="submit">确认导出</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="candidateDialog" class="export-dialog" aria-labelledby="candidateDialogTitle">
+      <form id="candidateForm" novalidate>
+        <p class="eyebrow">人工门禁</p>
+        <h2 id="candidateDialogTitle">确认候选步骤</h2>
+        <p id="candidateDialogDescription"></p>
+        <p id="candidateDialogArtifact" class="candidate-version"></p>
+        <label for="candidateConfirmation">输入 <code>fire_tower</code> 确认当前产物版本</label>
+        <input id="candidateConfirmation" name="confirmation" type="text" autocomplete="off" spellcheck="false" />
+        <p id="candidateConfirmationError" class="form-error" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancelCandidateButton" class="button button-secondary" type="button">取消</button>
+          <button id="confirmCandidateButton" class="button button-primary" type="submit">确认执行</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="/app.js"></script>
+  </body>
+</html>
