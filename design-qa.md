@@ -1,71 +1,69 @@
-# Design QA — Artflow v0.1
+# Design QA — Artflow six-stage production workbench
 
 ## Comparison target
 
-- Source visual truth: `/Users/andrew/.codex/generated_images/019ff10e-b71c-75f1-8e22-cb1f5ec52cc5/exec-76fee14f-8e4d-436a-b311-288153d106a9.png`
-- Implementation capture: `/private/tmp/artflow_desktop.png`
-- Side-by-side comparison: `/private/tmp/artflow_design_comparison.png`
-- Compared state: Fire Tower loaded; fixed-board preview selected; evidence panel visible; no command running.
-- Source dimensions: 1484 × 1054 px. Implementation dimensions: 1440 × 1000 px at a 1440 × 1000 CSS-px viewport and device scale factor 1. The comparison preserves each source's native density; findings exclude the 44 × 54 px viewport difference.
+- Source visual truth: `/Users/andrew/.codex/generated_images/019ff10e-b71c-75f1-8e22-cb1f5ec52cc5/exec-098789b0-85e2-45d1-9f00-39e02db73814.png`
+- Browser-rendered implementation: `/private/tmp/artflow-layout-qa-v3/implementation-1280x720.jpg`
+- Full-view comparison evidence: `/private/tmp/artflow-layout-qa-v3/comparison-2560x760.jpg`
+- Focused pipeline comparison evidence: `/private/tmp/artflow-layout-qa-v3/focused-pipeline.jpg`
+- Route and state: `http://127.0.0.1:4179/`, Fire Tower, six-stage pipeline, input preparation selected.
 
-## Full-view comparison
+## Viewport and normalization
 
-The implementation preserves the selected direction's central visual workspace, left asset rail, right-hand contract/evidence column, dark slate/sand palette, and restrained rectangular surfaces. It intentionally simplifies the reference's desktop-shell affordances (menus, editor tabs, project tree) because Artflow v0.1 is a standalone local browser workbench, not an editor replacement.
-
-Focused inspection covered the top action area, preview tabs and evidence list. The Fire Tower imagery is served from real project artifacts; no CSS-drawn or placeholder visible assets are used.
-
-## Required fidelity surfaces
-
-- Fonts and typography: system sans and monospace fallbacks preserve a clear hierarchy between the asset heading, evidence labels, and file hashes. The implementation is somewhat more compact than the source, which is intentional to keep the first live asset's evidence visible together.
-- Spacing and layout rhythm: desktop composition keeps the source's three working zones. The preview was reduced to a 420 px ceiling so that it remains dominant without pushing all lower workflow content too far below the fold.
-- Colors and visual tokens: slate canvas/surfaces, muted blue-grey dividers, warm sand action accents, and green pass state follow the source direction. No gradients are used.
-- Image quality and asset fidelity: the preview uses the actual fixed-board Fire Tower review image with pixel-preserving rendering. The sidebar thumbnail uses the actual runtime PNG. No fictional asset is substituted.
-- Copy and content: labels describe the current safe scope: evidence, dry-run, full on-demand `artctl verify buildings`, runtime-optional export preflight, and a deliberately blocked export step.
-- Icons and controls: the implementation uses text labels for its few controls; it does not introduce a mismatched icon family. All primary controls, preview tabs, evidence links, and pipeline step selection work.
-
-## Responsive check
-
-At 390 × 844 CSS px, there is no horizontal overflow. The action buttons remain visible and share a 350 px row, preview width is 318 px, and the six pipeline steps expose deliberate horizontal scrolling rather than clipping their labels. No console errors were found.
+- Source: 1487 × 1058 pixels, normalized proportionally into a 1280 × 720 comparison pane without cropping.
+- Implementation: 1280 × 720 CSS px at device scale factor 1; capture is 1280 × 720 pixels.
+- The combined comparison presents both panes at the same 1280 × 720 frame. The source is letterboxed because its aspect ratio differs from the browser viewport.
+- The focused comparison isolates each pipeline rail and scales them proportionally for structural review.
 
 ## Findings
 
-- [P3] The source mock reserves a visible lower pipeline row at desktop scale, while the live page prioritizes the real board preview and evidence list above the fold. This is acceptable for v0.1 because the current asset's review image is the primary decision surface; users can scroll to the live pipeline without losing context.
-
-## Interaction evidence
-
-- `运行 dry-run` produced a plan with no writes and only the runtime-optional building export preflight marked executable.
-- `验证建筑合同` returned `Static-building contracts valid (1 assets; 0 not yet integrated).`
-- Switching to `运行时 PNG` updated the preview.
-- Browser console error check: no errors.
+- No actionable P0, P1, or P2 findings remain.
+- Typography: the implementation preserves the source hierarchy of a large asset title, compact pipeline labels, and denser inspector copy. The six longer production labels remain readable at desktop width.
+- Spacing and layout rhythm: the connected pipeline rail now contains six evenly spaced core stages. Removing six review-only or utility nodes improves scanability without leaving gaps; the preview remains the dominant surface and the step inspector stays adjacent.
+- Colors and visual tokens: dark navy surfaces, muted borders, amber current state, green structural status, and orange artifact links remain aligned with the selected direction.
+- Image quality and asset fidelity: the implementation uses real Fire Tower production images and keeps pixel rendering sharp. No mock asset, CSS drawing, or placeholder replaces the reference imagery.
+- Copy and content: review requirements are expressed in each action's confirmation plan. The input stage no longer shows a misleading empty “本步骤结果” card. The report-only Godot verification stage is explicitly labeled “运行结果”.
+- Accessibility: the timeline remains button-based with numbered accessible names and state text. The input-preparation action is explicitly disabled; no horizontal body overflow was observed at 1280 px.
 
 ## Comparison history
 
-1. Initial live comparison identified an overly permissive dry-run label: the final Godot verification was shown as executable despite v0.1's stated boundary. Fixed the adapter so only `contract_verify` can be executable. Re-tested the rendered dry-run result; `Godot 严格视觉验证` now reads `仅列出`.
+### Pass 1 — blocked
 
-## Iteration — preview navigation and controlled export
+- [P2] The twelve-node rail treated three input evidence views, two manual review checkpoints, contract preflight, and environment diagnostics as first-class production stages, making the main process harder to scan.
+- [P2] Read-only steps rendered a large empty result card even though they neither produced a file nor recorded a command result.
+- [P2] The export action bundled contract verification, export, and global strict visual verification, obscuring which operation the button would execute.
 
-- Updated implementation capture: `/private/tmp/artflow_preview_interaction_update.png`
-- Desktop viewport: 1440 × 1000 CSS px, device scale factor 1.
-- Mobile viewport: 390 × 844 CSS px, device scale factor 1; no horizontal overflow.
+### Pass 2 — passed
 
-Changes made after live review:
+- Consolidated input evidence into “准备输入材料”.
+- Folded hard-Alpha and Aseprite review requirements into the action confirmation plans.
+- Folded source/contract preflight into export, matching the existing `artctl export building` behavior.
+- Kept global Godot strict visual validation as a separate sixth stage and action.
+- Removed diagnostics from the production rail; project integration checks remain in the workbench header and `artctl diagnose` remains available as a utility command.
+- Suppressed empty output sections for read-only stages while retaining a “运行结果” explanation for report-only command stages.
+- Post-fix evidence: `/private/tmp/artflow-layout-qa-v3/comparison-2560x760.jpg` and `/private/tmp/artflow-layout-qa-v3/focused-pipeline.jpg`.
 
-1. Renamed the preview overline from `当前证据` to `预览`.
-2. Prevented the evidence column from stretching the preview panel. The preview now ends directly after its geometry information rather than leaving a large empty lower area.
-3. Added real preview navigation: `+`/`−`, mouse-wheel zoom, pointer drag, keyboard arrow-pan, and `适配视图`. A live drag test changed the stage transform and `适配视图` returned it to `translate(0px, 0px) scale(1)`.
-4. Added a controlled UI export. The button opens a purpose-built modal; it requires the exact text `fire_tower`, then the server repeats contract verification before invoking the declared `artctl export building fire_tower` command. Direct calls without the exact confirmation return HTTP 403 and do not write assets.
+## Primary interactions tested
 
-No new browser console errors appeared after this change. The earlier unsupported native `prompt()` error was removed by replacing it with the page modal.
+- Input stage: no output/result card, six input artifact links, read-only action, disabled execution button.
+- Export stage: one runtime PNG output card and one fixed “导出运行时 PNG” action.
+- Export plan: contains exactly one step and requires confirmation of the formal Aseprite source; no global strict visual validation is included.
+- Strict visual validation stage: fixed “严格视觉验证” action and report-only result explanation.
+- Pipeline adapter check: valid, six steps, five commands, four writes.
+- Browser console errors checked: none.
+- JavaScript syntax, JSON parsing, and repository diff checks passed.
+- Python suite: 38 tests passed.
 
-## Final result
+## Follow-up polish
 
-passed
+- [P3] The selected design includes a thumbnail inside the left asset card and a green publication pill beside the title. These remain optional until the generic adapter exposes a canonical asset thumbnail.
 
-## Iteration — verified version and run ledger
+## Implementation checklist
 
-- Updated implementation capture: `/private/tmp/artflow_verified_workflow_final.png`
-- Desktop viewport: 1440 × 1000 CSS px, device scale factor 1.
-- New interaction evidence: clicking `严格视觉验证` completed `artctl verify visuals` with exit code 0 and produced a durable `visual_verify` run record. The UI showed `已验证`, the runtime PNG hash, and an expandable record containing `runtime_verify` and the input/output hashes.
-- Console error check: no errors.
+- [x] Reduce the production rail from twelve entries to six core stages.
+- [x] Preserve manual review as action-level approval instead of standalone steps.
+- [x] Separate runtime export from global strict visual validation.
+- [x] Remove the empty result card from read-only input preparation.
+- [x] Validate configuration, plans, browser interactions, console, and automated tests.
 
-The run ledger remains local, records only execution facts, and has no effect on source contracts or export metadata. The implementation test suite also exercises the transition from a verified fingerprint to `stale` after an input change.
+final result: passed

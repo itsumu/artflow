@@ -1,30 +1,34 @@
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass
+"""Shared errors and deterministic identities."""
+import hashlib
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 
-@dataclass(frozen=True)
-class Artifact:
-    id: str
-    label: str
-    kind: str
-    path: Path
-    required: bool = True
-
-    def to_dict(self, *, exists: bool, sha256: str | None, size: int | None) -> dict:
-        return {
-            **asdict(self),
-            "path": str(self.path),
-            "exists": exists,
-            "sha256": sha256,
-            "size": size,
-        }
+class ProjectError(ValueError):
+    pass
 
 
-@dataclass(frozen=True)
-class CommandSpec:
-    id: str
-    label: str
-    argv: tuple[str, ...]
-    writes_files: bool
+def now():
+    return datetime.now(UTC).isoformat()
+
+
+def read_json(path: Path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ProjectError(f"{path}: {error}") from error
+    if not isinstance(data, dict):
+        raise ProjectError(f"{path}: expected a JSON object")
+    return data
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def file_hash(path: Path):
+    if not path.is_file():
+        return None
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()

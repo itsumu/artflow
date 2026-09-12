@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artflow</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<main class="app-shell">
+<header class="topbar"><a class="brand" href="/">Artflow</a><nav class="breadcrumbs" id="breadcrumbs" aria-label="当前位置"></nav><div class="local-state">本地工作台</div></header>
+<aside class="sidebar"><section><p class="eyebrow">项目</p><div id="projectName" class="project-name"></div><p class="muted">由项目适配包提供资产与流程</p></section><nav id="assetNav" class="asset-nav" aria-label="资产列表"></nav><section class="sidebar-note"><p>可追溯的资产制作</p><span>先查看执行计划，确认输入版本和输出位置，再开始制作。</span></section></aside>
+<section class="workspace">
+<div class="asset-heading"><div><p id="assetKind" class="eyebrow"></p><h1 id="assetTitle">读取项目…</h1><p id="publishedState" class="muted"></p></div><div class="heading-actions"><button id="checkButton" class="button button-secondary">检查接入</button><button id="refreshButton" class="button button-secondary">刷新</button></div></div>
+<section class="pipeline-panel"><div class="panel-heading pipeline-heading"><div><h2 id="pipelineTitle">生产流程</h2><span id="pipelineCount" class="pipeline-count"></span></div><span id="pipelineStatus" class="state-pill"></span></div><ol id="pipelineSteps" class="pipeline-steps"></ol></section>
+<div class="workspace-grid">
+<section class="preview-panel"><div class="panel-heading"><h2 id="previewTitle">产物预览</h2><div class="preview-toolbar"><div class="zoom-controls"><button id="zoomOutButton" class="icon-button" aria-label="缩小">−</button><button id="fitPreviewButton" class="plain-button">适配视图</button><button id="zoomInButton" class="icon-button" aria-label="放大">+</button></div><div class="background-controls" role="group" aria-label="预览背景"><span>背景</span><button class="background-choice is-active" data-background="white" aria-pressed="true">白</button><button class="background-choice" data-background="black" aria-pressed="false">黑</button></div></div></div>
+<div id="previewTabs" class="view-tabs" role="tablist" aria-label="预览产物"></div>
+<figure id="previewViewport" class="art-preview" data-background="white" tabindex="0" aria-label="可拖动、缩放的图片预览"><div id="previewStage" class="preview-stage"><img id="previewImage" alt="" draggable="false"></div></figure>
+<div id="otherPreview" hidden></div><p id="previewCaption" class="muted"></p><p class="preview-help">拖动查看 · 滚轮缩放 · 白／黑背景检查透明边缘</p>
+</section>
+<aside class="inspector-panel" aria-label="当前资产上下文">
+<section class="inspector-block step-context"><p class="eyebrow">当前步骤</p><article id="stepDetail" class="step-detail"></article></section>
+<section class="inspector-block action-launcher"><p class="eyebrow">本步骤操作</p><h3 id="actionLabel">无需执行</h3><p id="actionDescription" class="muted"></p><button id="runActionButton" class="button button-primary" type="button" disabled>本步骤无需执行</button></section>
+<section class="inspector-block asset-summary"><h2>当前资产</h2><dl id="metadata" class="contract-summary"></dl></section>
+<details class="inspector-details"><summary>其他产物 <span id="artifactCount"></span></summary><div id="artifactList" class="artifact-list"></div></details>
+<details class="inspector-details run-inspector" open><summary><span id="resultTitle">运行记录</span><span id="resultBadge" class="summary-badge"></span></summary><div class="run-controls"><select id="runSelect" aria-label="选择运行记录"></select><button id="cancelRun" class="plain-button" hidden>取消运行</button></div><p id="resultLead" class="muted" role="status"></p><pre id="resultOutput">选择操作查看计划。</pre></details>
+</aside>
+</div>
+</section></main>
+<dialog id="planDialog" class="export-dialog"><form id="planForm"><h2 id="planTitle">执行计划</h2><p id="planDescription"></p><ol id="planSteps"></ol><p>使用当前已有产物作为本次输入：</p><div id="planInputs"></div><p>本次输出：</p><div id="planOutputs"></div><p id="planErrors" class="form-error"></p><label id="confirmationLabel" for="confirmation"></label><input id="confirmation" autocomplete="off" spellcheck="false"><details><summary>查看技术计划</summary><pre id="planJSON"></pre></details><p id="confirmationError" class="form-error" role="alert"></p><div class="dialog-actions"><button id="closePlan" type="button" class="button button-secondary">关闭</button><button id="submitPlan" class="button button-primary" type="submit">执行</button></div></form></dialog>
+<script src="/app.js"></script></body></html>

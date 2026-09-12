@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "project_id": "starter",
+  "label": "Artflow 示例工作室",
+  "roots": {
+    "project": "."
+  },
+  "storage": ".artflow-state",
+  "pipelines": "pipelines.json",
+  "executors": {
+    "python": {
+      "argv": [
+        "{python}",
+        "{root.project}/make_asset.py"
+      ],
+      "cwd": "{root.project}",
+      "allowed_commands": [
+        [
+          "build",
+          "{artifact.brief}",
+          "{artifact.image}"
+        ],
+        [
+          "verify",
+          "{artifact.image}"
+        ]
+      ],
+      "version_files": [
+        "{root.project}/make_asset.py"
+      ],
+      "response": {
+        "format": "exit_code"
+      }
+    }
+  },
+  "templates": {
+    "icon": {
+      "kind": "矢量图标",
+      "pipeline": "icon",
+      "metadata": {
+        "说明": "无需安装美术软件即可运行的示例"
+      },
+      "artifacts": {
+        "brief": {
+          "label": "设计参数",
+          "kind": "json",
+          "path": "inputs/{asset_id}.json"
+        },
+        "image": {
+          "label": "图标 SVG",
+          "kind": "image",
+          "path": "output/{asset_id}.svg"
+        }
+      },
+      "preview": [
+        "image"
+      ]
+    }
+  },
+  "assets": {
+    "sun": {
+      "template": "icon",
+      "label": "太阳"
+    },
+    "moon": {
+      "template": "icon",
+      "label": "月亮"
+    }
+  }
+}

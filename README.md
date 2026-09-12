@@ -1,47 +1,89 @@
 # Artflow
 
-Artflow is a local, auditable art-production workbench. Its first adapter reads
-the UnamedTactics Fire Tower pipeline without duplicating asset contracts or
-calling arbitrary shell commands.
+A local workbench for repeatable art production. Projects supply assets, tools,
+pipelines and review boundaries through JSON adapters. The core runs commands,
+records versions and logs, and displays artifacts without knowing an engine or
+an asset type.
 
-## artctl machine interface
+Requires Python 3.11+ on macOS or Linux. No runtime Python packages are required.
+Windows support is not implemented yet (process groups and file locks are POSIX).
 
-The workbench invokes only the project adapter's allow-listed `artctl` commands,
-with a configured Godot project root and a structured response:
+## Try an independent project
 
-```sh
-cd /Users/andrew/GodotProjects/UnamedTactics/art_source
-tools/artctl --project-root ../UnamedTactics --json capabilities
-tools/artctl --project-root ../UnamedTactics --json diagnose
-tools/artctl --project-root ../UnamedTactics --json verify buildings
-tools/artctl --project-root ../UnamedTactics --json verify building-export fire_tower
-```
-
-`artctl-json-v1` reports the command, exit status, timestamps, checks and
-contract-derived asset facts (including actual source/runtime file hashes). It
-does not duplicate contracts. Existing `tools/artctl ...` terminal commands
-remain supported.
-
-## Run the Fire Tower workbench
+Install from this checkout into an environment of your choice:
 
 ```sh
-scripts/run_local.sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/artflow init /tmp/my-art-studio
+.venv/bin/artflow check --project /tmp/my-art-studio/project.json
+.venv/bin/artflow serve --project /tmp/my-art-studio/project.json
 ```
 
-Open the printed local address. The first release is deliberately safe:
+Open <http://127.0.0.1:4179>. The starter includes two SVG assets and a small
+standard-library production tool, so no game project or creative software is
+needed. Select an asset, open **制作并验证**, review the plan, and enter its asset
+ID to execute. Edit an input to see the old step results become stale.
 
-- shows live contract, source, preview and runtime artifacts;
-- exposes approved raw -> hard Alpha -> Aseprite candidate -> formal source as three separately confirmed actions, each locked to the reviewed input SHA;
-- runs full `artctl --json verify buildings` on demand; confirmed export uses the runtime-optional `verify building-export fire_tower` preflight before `artctl --json export building fire_tower`;
-- offers dry-run planning without writes; candidate actions cannot overwrite the runtime PNG, and runtime export remains its own confirmation gate;
-- provides a non-mutating environment diagnostic for `artctl`, Python, optional PyYAML, Aseprite, Godot, contract readability, repository locations and contract-derived runtime output directories; it checks permissions without writing a probe file and does not launch Aseprite or Godot;
-- validates the version-controlled pipeline DAG before dry-run or export: input sources, dependency cycles, command allow-lists, `artctl` capabilities, write-path conflicts, approval gates and resource locks;
-- runs `artctl --json verify visuals` on demand; a confirmed export always follows with strict Godot visual verification;
-- acquires the version-controlled `asset:{asset_id}`, `aseprite_batch`, and `godot_import` resource locks as real cross-process locks before an export; interrupted/failed/stale runs offer a read-only retry preflight, then require the same typed confirmation before any write;
-- keeps a local run ledger with step logs, duration, exit codes, and input/output hashes, and marks a previously verified run stale if those files change.
+For an already installed distribution, use `artflow` directly. For development,
+`PYTHONPATH=src python3 -m artflow ...` works without installation.
+`scripts/run_local.sh /absolute/path/project.json` is a macOS developer convenience:
+it restarts the process listening on port 4179. Normal `artflow serve` never
+terminates another process.
 
-Project-specific commands and paths live in `art_source/.artflow/`; Artflow
-core remains reusable for another project's adapter. Local run records are
-stored once at the workspace-level `.artflow-runs/<project_id>/` directory,
-never in a source contract, the Artflow repository, or a runtime asset
-directory.
+## Connect a project
+
+Start from the example and replace its command/tool and artifact paths.
+Most tools need configuration only; they do not need to import Artflow.
+
+- [Adapter guide](docs/adapter.md): roots, templates, existing JSON contracts,
+  executors, outputs and review gates.
+- [Architecture](docs/architecture.md): execution model, state, locks and API.
+- [Release notes](docs/releasing.md): installation checks, support boundaries and
+  distribution steps.
+
+`artflow check --project ...` checks all assets, the DAG, resolved paths,
+executor availability, preview references, command allowlists and review
+boundaries without running production tools. Missing *future outputs* do not
+block onboarding. A selected action's plan checks its actual required inputs.
+
+```sh
+artflow plan --project project.json --asset sun --action build
+artflow run --project project.json --asset sun --action build --confirm sun
+```
+
+CLI writes require an exact asset confirmation; the web additionally binds
+confirmation to a plan token. CLI `run` owns the project's service lock; while
+the web server owns it, use the web API instead.
+
+## Included capabilities
+
+- Configuration-driven multi-asset navigation, actions and previews.
+- One resolved execution plan shared by preview and execution.
+- Explicit review boundaries between newly generated intermediate artifacts.
+- Background jobs, polling logs, cancellation and nonzero-exit handling.
+- SQLite step/run history, input/output hashes and approval records.
+- Input, adapter and declared tool changes invalidate dependent step results.
+- OS-owned resource locks shared by local projects; one service per project.
+- Pictures, audio and video previews; other files remain downloadable.
+- Localhost-only HTTP with per-session write tokens.
+
+Adapters are **trusted local code configuration**. Commands run with the user's
+permissions. Output declarations validate expected files and coordinate locks;
+they are not an OS filesystem sandbox. Only install adapters/tools you trust.
+
+## Development checks
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
+node --check src/artflow/web/app.js
+python3 -m pip wheel --no-deps . --wheel-dir dist
+```
+
+Tests use temporary independent projects. Project-specific regression checks
+belong to their adapters, not this repository.
+
+Version 0.2 uses adapter schema 2. Schema 1 adapters need explicit migration;
+there is no silent interpretation of the old project-specific format. Existing
+`runs.json` records are imported once into `runs.sqlite3`, retained as historical
+records and never relabeled as newly verified runs.

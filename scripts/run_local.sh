@@ -3,7 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-PROJECT_CONFIG="${1:-$REPO_ROOT/../art_source/.artflow/project.json}"
+if (( $# < 1 )); then
+  print -u2 'Usage: scripts/run_local.sh /path/to/project.json'
+  exit 2
+fi
+PROJECT_CONFIG="$1"
 HOST="127.0.0.1"
 PORT="4179"
 

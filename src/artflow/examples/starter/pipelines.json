@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "pipelines": {
+    "icon": {
+      "label": "图标制作与验证",
+      "steps": [
+        {
+          "id": "build",
+          "label": "制作图标",
+          "kind": "command",
+          "executor": "python",
+          "command": [
+            "build",
+            "{artifact.brief}",
+            "{artifact.image}"
+          ],
+          "inputs": [
+            "brief"
+          ],
+          "outputs": [
+            "image"
+          ],
+          "writes": true,
+          "requires_approval": true,
+          "approval_artifacts": [
+            "brief"
+          ],
+          "timeout_seconds": 30,
+          "retry_policy": "manual",
+          "locks": [
+            "asset:{project_id}:{asset_id}"
+          ]
+        },
+        {
+          "id": "verify",
+          "label": "验证图标",
+          "kind": "command",
+          "executor": "python",
+          "command": [
+            "verify",
+            "{artifact.image}"
+          ],
+          "inputs": [
+            "image"
+          ],
+          "outputs": [],
+          "depends_on": [
+            "build"
+          ],
+          "writes": false,
+          "timeout_seconds": 10,
+          "retry_policy": "safe",
+          "locks": []
+        }
+      ],
+      "actions": {
+        "build": {
+          "label": "制作并验证",
+          "steps": [
+            "build",
+            "verify"
+          ],
+          "publish_artifacts": [
+            "image",
+            "brief"
+          ],
+          "description": "用设计参数生成 SVG，再验证文件结构。"
+        },
+        "verify": {
+          "label": "验证已有图标",
+          "steps": [
+            "verify"
+          ],
+          "publish_artifacts": [
+            "image"
+          ]
+        }
+      }
+    }
+  }
+}

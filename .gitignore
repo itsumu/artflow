@@ -5,3 +5,7 @@ __pycache__/
 artflow.egg-info/
 .artflow-runs/
 .DS_Store
+build/
+dist/
+*.egg-info/
+.artflow-state/
