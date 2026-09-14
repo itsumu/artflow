@@ -6,7 +6,9 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from artflow.executor import CommandExecutor
+from unittest.mock import patch
+
+from artflow.executor import CommandExecutor, LOG_TAIL
 
 
 class ExecutorTests(unittest.TestCase):
@@ -38,6 +40,36 @@ class ExecutorTests(unittest.TestCase):
         result=self.executor.run({"argv":["/no-such-artflow-tool"],"cwd":str(self.root)},
             {"command":[],"timeout_seconds":1},threading.Event(),lambda *_:None)
         self.assertEqual(result["exit_code"],127)
+
+    def test_large_text_output_is_drained_but_only_keeps_a_tail(self):
+        result = self.run_code("import sys; sys.stdout.write('x' * 200000)")
+        self.assertTrue(result["ok"])
+        self.assertLessEqual(len(result["stdout"].encode()), LOG_TAIL)
+
+    def test_json_report_is_rejected_at_the_capture_limit(self):
+        code = "import json; print(json.dumps({'ok': True, 'data': 'x' * 2048}))"
+        with patch("artflow.executor.MAX_REPORT", 1024):
+            result = self.run_code(code, response={"format": "json"})
+        self.assertFalse(result["ok"])
+        self.assertIn("exceeds 1024 bytes", result["stderr"])
+
+    def test_detached_descendant_inheriting_pipes_does_not_block_completion(self):
+        pidfile = self.root / "detached.pid"
+        code = ("import subprocess,sys; from pathlib import Path; "
+                "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'],"
+                "start_new_session=True); "
+                f"Path({str(pidfile)!r}).write_text(str(p.pid))")
+        started = time.monotonic()
+        try:
+            result = self.run_code(code)
+            self.assertTrue(result["ok"])
+            self.assertLess(time.monotonic() - started, 1.5)
+        finally:
+            if pidfile.exists():
+                try:
+                    os.kill(int(pidfile.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     def test_timeout_kills_child_process_group(self):
         pidfile=self.root/"child.pid"

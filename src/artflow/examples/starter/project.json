@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "project_id": "starter",
-  "label": "Artflow 示例工作室",
+  "project_id": "pixel_sprite_demo",
+  "label": "Pixel Sprite Demo",
   "roots": {
     "project": "."
   },
@@ -17,7 +17,7 @@
       "allowed_commands": [
         [
           "build",
-          "{artifact.brief}",
+          "{artifact.recipe}",
           "{artifact.image}"
         ],
         [
@@ -34,22 +34,24 @@
     }
   },
   "templates": {
-    "icon": {
-      "kind": "矢量图标",
-      "pipeline": "icon",
+    "sprite": {
+      "kind": "Pixel Sprite",
+      "pipeline": "sprite",
       "metadata": {
-        "说明": "无需安装美术软件即可运行的示例"
+        "Canvas": [64, 64],
+        "Scale": 4,
+        "Format": "hard-alpha RGBA PNG"
       },
       "artifacts": {
-        "brief": {
-          "label": "设计参数",
+        "recipe": {
+          "label": "Sprite Recipe",
           "kind": "json",
           "path": "inputs/{asset_id}.json"
         },
         "image": {
-          "label": "图标 SVG",
+          "label": "Runtime PNG",
           "kind": "image",
-          "path": "output/{asset_id}.svg"
+          "path": "output/{asset_id}.png"
         }
       },
       "preview": [
@@ -58,13 +60,13 @@
     }
   },
   "assets": {
-    "sun": {
-      "template": "icon",
-      "label": "太阳"
+    "campfire": {
+      "template": "sprite",
+      "label": "Campfire"
     },
-    "moon": {
-      "template": "icon",
-      "label": "月亮"
+    "crystal": {
+      "template": "sprite",
+      "label": "Crystal"
     }
   }
 }

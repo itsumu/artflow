@@ -8,6 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from . import __version__
 from .model import ProjectError, digest, file_hash, read_json
 from .pipeline import ID, validate_pipeline_definition
 
@@ -51,6 +52,23 @@ def merge(base, overrides):
 
 def absolute(value, base):
     return (base / value).resolve()
+
+
+def find_executable(executable, cwd, executor):
+    """Resolve argv[0] using the same cwd and PATH semantics as execution."""
+    if os.sep in executable or (os.altsep and os.altsep in executable):
+        candidate = Path(executable)
+        if not candidate.is_absolute():
+            candidate = cwd / candidate
+        return str(candidate.resolve()) if candidate.is_file() and os.access(candidate, os.X_OK) else None
+    environment = {
+        key: os.environ[key]
+        for key in executor.get("inherit_env", ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"])
+        if key in os.environ
+    }
+    environment.update(executor.get("env", {}))
+    search_path = os.pathsep.join(os.get_exec_path(environment))
+    return shutil.which(executable, path=search_path)
 
 
 class Adapter:
@@ -140,17 +158,40 @@ class Adapter:
             if not isinstance(executor, dict):
                 raise ProjectError(f"executors.{eid}: expected an object")
             prefix = executor.get("argv")
-            if not isinstance(prefix, list) or not prefix or not all(isinstance(t, str) for t in prefix):
-                raise ProjectError(f"executors.{eid}.argv: expected string array")
-            executor["cwd"] = str(absolute(executor.get("cwd", "."), self.base))
+            if (not isinstance(prefix, list) or not prefix
+                    or not all(isinstance(token, str) for token in prefix) or not prefix[0]):
+                raise ProjectError(f"executors.{eid}.argv: expected a nonempty string array")
+            cwd = executor.get("cwd", ".")
+            if not isinstance(cwd, str):
+                raise ProjectError(f"executors.{eid}.cwd: expected a path string")
+            executor["cwd"] = str(absolute(cwd, self.base))
             response = executor.get("response", {})
+            if not isinstance(response, dict):
+                raise ProjectError(f"executors.{eid}.response: expected an object")
             if response.get("format", "exit_code") not in {"exit_code", "json"}:
                 raise ProjectError(f"executors.{eid}: unsupported response format")
-            if not isinstance(executor.get("allowed_commands"), list):
-                raise ProjectError(f"executors.{eid}: allowed_commands required")
-            for path in executor.get("version_files", []):
-                if not isinstance(path, str):
-                    raise ProjectError(f"executors.{eid}: version_files must be paths")
+            if not isinstance(response.get("success_field", "ok"), str):
+                raise ProjectError(f"executors.{eid}.response.success_field: expected a string")
+            required = response.get("required", {})
+            if not isinstance(required, dict) or any(not isinstance(key, str) for key in required):
+                raise ProjectError(f"executors.{eid}.response.required: expected an object")
+            allowed = executor.get("allowed_commands")
+            if (not isinstance(allowed, list)
+                    or any(not isinstance(command, list) or not command
+                           or not all(isinstance(token, str) for token in command)
+                           for command in allowed)):
+                raise ProjectError(f"executors.{eid}.allowed_commands: expected command arrays")
+            version_files = executor.get("version_files", [])
+            if not isinstance(version_files, list) or not all(isinstance(path, str) for path in version_files):
+                raise ProjectError(f"executors.{eid}.version_files: expected path strings")
+            inherit_env = executor.get("inherit_env", ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL"])
+            if not isinstance(inherit_env, list) or not all(isinstance(key, str) for key in inherit_env):
+                raise ProjectError(f"executors.{eid}.inherit_env: expected environment variable names")
+            environment = executor.get("env", {})
+            if (not isinstance(environment, dict)
+                    or any(not isinstance(key, str) or not isinstance(value, str)
+                           for key, value in environment.items())):
+                raise ProjectError(f"executors.{eid}.env: expected string values")
         pid = spec.get("pipeline")
         if pid not in self.pipeline_config.get("pipelines", {}):
             raise ProjectError(f"{aid}: unknown pipeline {pid}")
@@ -174,21 +215,98 @@ class Adapter:
 
     def check(self):
         assets, errors = [], []
+
+        def issue(asset_id, code, path, message, hint, resolved_path=None):
+            error = {"asset_id": asset_id, "code": code, "path": path,
+                     "message": message, "hint": hint}
+            if resolved_path is not None:
+                error["resolved_path"] = str(resolved_path)
+            errors.append(error)
+
         for aid in self.config["assets"]:
             try:
                 asset = self.resolve(aid)
-                errors.extend({"asset_id": aid, **error} for error in asset["validation"]["errors"])
+                for error in asset["validation"]["errors"]:
+                    issue(aid, "invalid_pipeline", error["path"], error["message"],
+                          "Fix the pipeline definition, then run check again.")
                 checks = []
                 for eid, executor in asset["executors"].items():
                     executable = executor["argv"][0]
-                    found = shutil.which(executable)
-                    ok = bool(found) and Path(executor["cwd"]).is_dir()
-                    checks.append({"id": eid, "ok": ok, "executable": executable, "cwd": executor["cwd"]})
-                    if not ok:
-                        errors.append({"asset_id": aid, "path": f"executors.{eid}", "message": "Executable or working directory unavailable"})
+                    cwd = Path(executor["cwd"])
+                    found = find_executable(executable, cwd, executor)
+                    version_files = []
+                    for value in executor.get("version_files", []):
+                        path = absolute(value, self.base)
+                        exists = path.is_file()
+                        version_files.append({"path": str(path), "ok": exists})
+                        if not exists:
+                            issue(aid, "missing_version_file", f"executors.{eid}.version_files",
+                                  f"Tool version file does not exist: {path}",
+                                  "Create the file or remove the stale version_files entry.", path)
+                    if not found:
+                        issue(aid, "missing_executable", f"executors.{eid}.argv",
+                              f"Executable is unavailable: {executable}",
+                              "Install the tool or correct executors.argv.", executable)
+                    if not cwd.is_dir():
+                        issue(aid, "missing_working_directory", f"executors.{eid}.cwd",
+                              f"Working directory does not exist: {cwd}",
+                              "Create the directory or correct executors.cwd.", cwd)
+                    checks.append({"id": eid, "ok": bool(found) and cwd.is_dir()
+                                   and all(item["ok"] for item in version_files),
+                                   "executable": executable, "resolved_executable": found,
+                                   "cwd": str(cwd), "version_files": version_files})
+                if asset["validation"]["ok"]:
+                    by_id = {step["id"]: step for step in asset["pipeline"]["steps"]}
+                    produced = set()
+                    external = set()
+                    for step_id in asset["validation"]["execution_order"]:
+                        step = by_id[step_id]
+                        external.update(set(step.get("inputs", [])) - produced)
+                        produced.update(step.get("outputs", []))
+                    for artifact_id in sorted(external):
+                        path = Path(asset["artifacts"][artifact_id]["path"])
+                        if not path.is_file():
+                            issue(aid, "missing_input", f"artifacts.{artifact_id}.path",
+                                  f"Required input does not exist: {path}",
+                                  "Create the input file or correct the artifact path.", path)
                 assets.append({"id": aid, "label": asset["label"], "kind": asset["kind"],
                                "steps": len(asset["pipeline"]["steps"]), "executors": checks})
             except (ProjectError, KeyError, TypeError, OSError) as error:
-                errors.append({"asset_id": aid, "path": "adapter", "message": str(error)})
-        return {"ok": not errors, "project_id": self.config["project_id"], "assets": assets,
-                "errors": errors, "storage": str(self.storage)}
+                issue(aid, "invalid_adapter", "adapter", str(error),
+                      "Fix the project or pipeline JSON, then run check again.")
+        return {"ok": not errors, "artflow_version": __version__,
+                "project_id": self.config["project_id"], "project_label": self.config["label"],
+                "assets": assets,
+                "errors": errors, "storage": str(self.storage), "restart_required": False}
+
+
+def check_project(path, *, expected_project_id=None, expected_storage=None):
+    """Return a stable check report even when the adapter cannot be loaded."""
+    manifest = Path(path).resolve()
+    try:
+        adapter = Adapter(manifest)
+        result = adapter.check()
+    except (ProjectError, KeyError, TypeError, OSError) as error:
+        return {"ok": False, "artflow_version": __version__, "project_id": None,
+                "project_label": None, "assets": [], "storage": None, "restart_required": False,
+                "errors": [{"asset_id": None, "code": "invalid_adapter", "path": "adapter",
+                            "message": str(error),
+                            "hint": "Fix the project JSON, then run check again.",
+                            "resolved_path": str(manifest)}]}
+
+    identity_changed = ((expected_project_id is not None
+                         and adapter.config["project_id"] != expected_project_id)
+                        or (expected_storage is not None
+                            and adapter.storage != Path(expected_storage).resolve()))
+    if identity_changed:
+        result["restart_required"] = True
+        result["ok"] = False
+        result["errors"].append({
+            "asset_id": None,
+            "code": "restart_required",
+            "path": "project.identity",
+            "message": "Project ID or storage changed while Artflow was running.",
+            "hint": "Restart Artflow before using the updated project configuration.",
+            "resolved_path": str(manifest),
+        })
+    return result

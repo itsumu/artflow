@@ -1,4 +1,6 @@
 #!/usr/bin/env zsh
+# Developer-only restart helper. It intentionally stops any process listening
+# on port 4179; public users should run `artflow serve --port ...` instead.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"

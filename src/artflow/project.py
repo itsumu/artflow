@@ -5,7 +5,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .adapter import Adapter
+from . import __version__
+from .adapter import Adapter, check_project
 from .executor import CommandExecutor
 from .ledger import ACTIVE, RunLedger
 from .model import ProjectError, digest, file_hash, now
@@ -20,18 +21,30 @@ class Project:
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="artflow")
         self.cancel_events = {}
         self.guard = threading.Lock()
+        self.closed = False
 
-    def resolve(self, aid):
-        # Reload definitions for every plan. Browser confirmations bind their hash.
+    def current_adapter(self):
+        """Reload configuration while preserving the running service identity."""
         adapter = Adapter(self.config_path)
         if adapter.storage != self.adapter.storage or adapter.config["project_id"] != self.adapter.config["project_id"]:
             raise ProjectError("Project identity or storage changed; restart the service to use the new location")
+        return adapter
+
+    def check(self):
+        return check_project(self.config_path,
+                             expected_project_id=self.adapter.config["project_id"],
+                             expected_storage=self.adapter.storage)
+
+    def resolve(self, aid):
+        # Reload definitions for every plan. Browser confirmations bind their hash.
+        adapter = self.current_adapter()
         return adapter.resolve(aid)
 
     def assets(self):
-        adapter = Adapter(self.config_path)
+        adapter = self.current_adapter()
         resolved = [adapter.resolve(aid) for aid in adapter.config["assets"]]
-        return {"project": {"id": adapter.config["project_id"], "label": adapter.config["label"]},
+        return {"artflow_version": __version__,
+                "project": {"id": adapter.config["project_id"], "label": adapter.config["label"]},
                 "assets": [{k: asset[k] for k in ("id", "label", "kind")} for asset in resolved]}
 
     @staticmethod
@@ -55,13 +68,15 @@ class Project:
                 current = self.hashes(asset, step.get("inputs", []) + step.get("outputs", []))
                 if status == "passed" and (record.get("files") != current or record.get("definition_hash") != asset["definition_hash"]):
                     status = "stale"
-            if status == "passed" and any(states.get(dep) in {"stale", "failed", "cancelled"} for dep in step.get("depends_on", [])):
+            if status == "passed" and any(states.get(dep) in {"stale", "failed", "cancelled", "interrupted"}
+                                          for dep in step.get("depends_on", [])):
                 status = "stale"
             states[sid] = status
         return states
 
     def read_asset(self, aid):
-        asset = self.resolve(aid)
+        adapter = self.current_adapter()
+        asset = adapter.resolve(aid)
         records = []
         for item in asset["artifacts"].values():
             path = Path(item["path"])
@@ -76,7 +91,7 @@ class Project:
             valid = (published.get("definition_hash") == asset["definition_hash"]
                      and published["published_files"] == self.hashes(asset, list(published["published_files"])))
             published_state = "verified" if valid else "stale"
-        return {"project": {"id": self.adapter.config["project_id"], "label": self.adapter.config["label"]},
+        return {"project": {"id": adapter.config["project_id"], "label": adapter.config["label"]},
                 "asset": {k: asset[k] for k in ("id", "label", "kind", "metadata", "preview", "pipeline_id")},
                 "artifacts": records, "pipeline": asset["pipeline"], "validation": asset["validation"],
                 "step_states": states, "runs": runs, "published_state": published_state,
@@ -113,7 +128,9 @@ class Project:
                 errors.append(f"Missing input: {artifact}")
         states = self.step_states(asset)
         for sid, source in by_id.items():
-            if sid not in action["steps"] and external.intersection(source.get("outputs", [])) and states.get(sid) in {"stale", "failed", "cancelled"}:
+            if (sid not in action["steps"]
+                    and external.intersection(source.get("outputs", []))
+                    and states.get(sid) in {"stale", "failed", "cancelled", "interrupted"}):
                 errors.append(f"Input producer {sid} is {states[sid]}; rebuild before continuing")
         locks = sorted({f"asset:{self.adapter.config['project_id']}:{aid}"} |
                        {lock for s in steps for lock in s.get("locks", [])} |
@@ -130,6 +147,9 @@ class Project:
         return plan
 
     def submit(self, aid, action_id, token, confirmation=""):
+        with self.guard:
+            if self.closed:
+                raise ProjectError("Project is closing; no new run can be submitted.")
         plan = self.plan(aid, action_id)
         if not plan["ok"]:
             raise ProjectError("; ".join(plan["errors"]))
@@ -137,11 +157,19 @@ class Project:
             raise ProjectError("Inputs or configuration changed. Review a fresh plan.")
         if plan["requires_approval"] and confirmation != aid:
             raise ProjectError("Exact asset confirmation is required.")
-        run = self.ledger.create(aid, action_id, plan)
         event = threading.Event()
         with self.guard:
+            if self.closed:
+                raise ProjectError("Project is closing; no new run can be submitted.")
+            run = self.ledger.create(aid, action_id, plan)
             self.cancel_events[run["run_id"]] = event
-        self.pool.submit(self._execute, run["run_id"], event, confirmation)
+            try:
+                self.pool.submit(self._execute, run["run_id"], event, confirmation)
+            except RuntimeError as error:
+                self.cancel_events.pop(run["run_id"], None)
+                self.ledger.update(run["run_id"], status="failed", finished_at=now(),
+                                   message="Worker pool was unavailable; no command started.")
+                raise ProjectError("Project is closing; no new run can be submitted.") from error
         return run
 
     def _execute(self, rid, cancelled, confirmation):
@@ -226,6 +254,9 @@ class Project:
 
     def close(self):
         with self.guard:
+            if self.closed:
+                return
+            self.closed = True
             for event in self.cancel_events.values():
                 event.set()
         self.pool.shutdown(wait=True)

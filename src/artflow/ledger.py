@@ -5,6 +5,7 @@ import fcntl
 import json
 import os
 import sqlite3
+import stat
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,6 +18,26 @@ ACTIVE = {"queued", "running"}
 
 class RunBusyError(ProjectError):
     pass
+
+
+def shared_lock_directory():
+    """Return a private, user-owned directory for cross-project locks."""
+    configured = os.environ.get("ARTFLOW_LOCK_DIR")
+    path = Path(configured).expanduser() if configured else (
+        Path(tempfile.gettempdir()) / f"artflow-locks-{os.getuid()}")
+    try:
+        path.mkdir(parents=True, mode=0o700, exist_ok=True)
+        info = path.lstat()
+    except OSError as error:
+        raise ProjectError(f"Cannot prepare shared lock directory: {path}: {error}") from error
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise ProjectError(f"Shared lock directory must be a user-owned directory: {path}")
+    if stat.S_IMODE(info.st_mode) != 0o700:
+        try:
+            path.chmod(0o700)
+        except OSError as error:
+            raise ProjectError(f"Cannot secure shared lock directory: {path}: {error}") from error
+    return path
 
 
 @contextmanager
@@ -105,7 +126,16 @@ class RunLedger:
             for rid, payload in rows:
                 run = json.loads(payload)
                 if run.get("status") in ACTIVE:
-                    run.update(status="interrupted", finished_at=now(), message="Previous worker stopped; prepare a fresh plan to retry.")
+                    finished_at = now()
+                    steps = []
+                    for record in run.get("steps", []):
+                        if record.get("status") == "running":
+                            record = {**record, "status": "interrupted",
+                                      "finished_at": finished_at}
+                        steps.append(record)
+                    run.update(status="interrupted", steps=steps,
+                               finished_at=finished_at,
+                               message="Previous worker stopped; prepare a fresh plan to retry.")
                     db.execute("UPDATE runs SET payload=? WHERE id=?", (json.dumps(run), rid))
                     count += 1
             return count
@@ -114,8 +144,8 @@ class RunLedger:
     def resource_locks(self, resources):
         from contextlib import ExitStack
         with ExitStack() as stack:
+            shared = shared_lock_directory()
             for resource in sorted(set(resources)):
-                shared = Path(tempfile.gettempdir()) / f"artflow-locks-{os.getuid()}"
                 stack.enter_context(file_lock(shared / (digest(resource) + ".lock")))
             yield
 

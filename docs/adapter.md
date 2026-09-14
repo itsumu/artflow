@@ -1,12 +1,17 @@
 # 接入指南（适配包 schema 2）
 
+第一次接入请先阅读更短的[项目接入指南](integration-guide.md)；本文作为完整字段参考。
+
 ## 最短接入路径
 
-1. 用 `artflow init 新目录` 创建可运行示例；先运行 check，再启动 Web。
+1. 用 `artflow init 新目录` 创建可运行的 PNG 像素精灵示例；先运行 check，再启动 Web。
 2. 改 `executors` 中的工具启动参数与允许命令。
 3. 改 `templates` 的输入、输出路径和管线；同类资产只需增加一个 assets 条目。
 4. 用 `artflow plan --project ... --asset ... --action ...` 查看解析后的输入与写入目标。
 5. 在 Web 确认执行；日志与产物自动出现在对应步骤。
+
+遇到接入问题时先运行 `artflow doctor --project ...`。`check` 会检查外部输入、
+执行器、工作目录和 `version_files`；尚未生成的未来输出不会被误报为缺失输入。
 
 普通项目只需要两个 JSON 文件。无需编写 Artflow 插件或学习 Python。
 已有工具可以继续输出普通文本，用退出码表示成功；已有 JSON 报告可直接适配。
@@ -101,6 +106,7 @@ steps 数组和 actions 对象。
 - depends_on：生产依赖，决定拓扑顺序、路径冲突与失效传播。
 - command 步骤还需 executor、command、timeout_seconds、retry_policy、
   writes（显式布尔值）。
+- 声明 outputs 的 command 步骤必须设置 writes: true，不能绕过审批边界。
 - 写入步骤需 outputs、locks、requires_approval: true、approval_artifacts。
   审批产物必须同时声明为 inputs。
 - 可选 description 提供面向操作者的说明。

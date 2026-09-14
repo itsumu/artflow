@@ -1,21 +1,22 @@
 {
   "schema_version": 2,
   "pipelines": {
-    "icon": {
-      "label": "图标制作与验证",
+    "sprite": {
+      "label": "Pixel Sprite Production",
       "steps": [
         {
           "id": "build",
-          "label": "制作图标",
+          "label": "Build PNG",
+          "description": "Turn the JSON pixel recipe into a transparent runtime PNG.",
           "kind": "command",
           "executor": "python",
           "command": [
             "build",
-            "{artifact.brief}",
+            "{artifact.recipe}",
             "{artifact.image}"
           ],
           "inputs": [
-            "brief"
+            "recipe"
           ],
           "outputs": [
             "image"
@@ -23,7 +24,7 @@
           "writes": true,
           "requires_approval": true,
           "approval_artifacts": [
-            "brief"
+            "recipe"
           ],
           "timeout_seconds": 30,
           "retry_policy": "manual",
@@ -33,7 +34,8 @@
         },
         {
           "id": "verify",
-          "label": "验证图标",
+          "label": "Verify PNG",
+          "description": "Check PNG chunks, CRC values, RGBA format and transparency.",
           "kind": "command",
           "executor": "python",
           "command": [
@@ -55,25 +57,26 @@
       ],
       "actions": {
         "build": {
-          "label": "制作并验证",
+          "label": "Build and verify",
           "steps": [
             "build",
             "verify"
           ],
           "publish_artifacts": [
             "image",
-            "brief"
+            "recipe"
           ],
-          "description": "用设计参数生成 SVG，再验证文件结构。"
+          "description": "Build the PNG from the reviewed recipe, then verify the result."
         },
         "verify": {
-          "label": "验证已有图标",
+          "label": "Verify existing PNG",
           "steps": [
             "verify"
           ],
           "publish_artifacts": [
             "image"
-          ]
+          ],
+          "description": "Verify the current PNG without rebuilding it."
         }
       }
     }

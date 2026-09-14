@@ -10,7 +10,7 @@ from artflow.pipeline import validate_pipeline_definition
 
 class PipelineTests(unittest.TestCase):
     def setUp(self):
-        self.asset = Adapter(files("artflow").joinpath("examples/starter/project.json")).resolve("sun")
+        self.asset = Adapter(files("artflow").joinpath("examples/starter/project.json")).resolve("campfire")
         self.pipeline = copy.deepcopy(self.asset["pipeline"])
 
     def check(self):
@@ -34,6 +34,12 @@ class PipelineTests(unittest.TestCase):
     def test_unapproved_write_rejected(self):
         self.pipeline["steps"][0]["requires_approval"]=False
         self.assertFalse(self.check()["ok"])
+
+    def test_step_cannot_declare_output_without_write_boundary(self):
+        self.pipeline["steps"][0]["writes"]=False
+        self.pipeline["steps"][0]["requires_approval"]=False
+        self.assertFalse(self.check()["ok"])
+        self.assertTrue(any("outputs must set writes" in error["message"] for error in self.check()["errors"]))
 
     def test_unknown_command_rejected(self):
         self.pipeline["steps"][0]["command"]=["delete","everything"]

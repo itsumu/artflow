@@ -1,11 +1,15 @@
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from artflow.ledger import RunLedger, RunBusyError, file_lock
+from artflow.ledger import RunLedger, RunBusyError, file_lock, shared_lock_directory
+from artflow.model import ProjectError
 
 
 class LedgerTests(unittest.TestCase):
@@ -36,6 +40,18 @@ class LedgerTests(unittest.TestCase):
             with self.assertRaises(RunBusyError):
                 with other.resource_locks(["path:"+str(self.root)]): pass
 
+    def test_shared_lock_directory_is_private_and_rejects_symlinks(self):
+        shared = self.root / "shared"
+        with patch.dict(os.environ, {"ARTFLOW_LOCK_DIR": str(shared)}):
+            self.assertEqual(stat.S_IMODE(shared_lock_directory().stat().st_mode), 0o700)
+        target = self.root / "target"
+        target.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(target, target_is_directory=True)
+        with patch.dict(os.environ, {"ARTFLOW_LOCK_DIR": str(alias)}):
+            with self.assertRaises(ProjectError):
+                shared_lock_directory()
+
     def test_cross_process_lock_is_released_on_process_exit(self):
         path=self.root/"held.lock"
         script="import fcntl,sys,time; f=open(sys.argv[1],'a+'); fcntl.flock(f,fcntl.LOCK_EX); print('held',flush=True); time.sleep(60)"
@@ -51,9 +67,17 @@ class LedgerTests(unittest.TestCase):
 
     def test_recovery_retains_history(self):
         run=self.ledger.create("test","build",{})
+        self.ledger.update(run["run_id"], status="running", steps=[
+            {"id": "build", "status": "passed", "finished_at": "earlier"},
+            {"id": "verify", "status": "running", "started_at": "now"},
+        ])
         with self.ledger.service_lock():
             self.assertEqual(self.ledger.recover_interrupted(),1)
-        self.assertEqual(self.ledger.get(run["run_id"])["status"],"interrupted")
+        recovered = self.ledger.get(run["run_id"])
+        self.assertEqual(recovered["status"],"interrupted")
+        self.assertEqual(recovered["steps"][0]["status"], "passed")
+        self.assertEqual(recovered["steps"][1]["status"], "interrupted")
+        self.assertTrue(recovered["steps"][1]["finished_at"])
 
     def test_legacy_json_import_is_idempotent_and_retained(self):
         folder=self.root/"legacy";folder.mkdir()

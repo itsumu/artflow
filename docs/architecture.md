@@ -36,6 +36,7 @@ results, even if only one asset was intended to change.
 
 ## Local API
 
+GET /api/health — service version and active project identity
 GET /api/project — asset discovery and session token
 GET /api/check — read-only adapter checks
 GET /api/assets/{asset_id} — metadata, artifacts, pipeline, states, history
@@ -56,5 +57,6 @@ The Executor protocol leaves a seam for later remote/Agent executors, but no
 Agent integration, automatic approval, remote farm or plugin marketplace is
 included. Images/audio/video are previewable; 3D/source formats use download.
 Windows needs an alternative lock/process implementation before support can
-be claimed. Long stdout/stderr is shown as a bounded 64 KB tail per stream;
-JSON reports are limited to 8 MiB and retained as structured reports.
+be claimed. Command pipes are continuously drained into bounded memory; long
+stdout/stderr is shown as a 64 KB tail per stream. JSON reports are limited to
+8 MiB and retained as structured reports.

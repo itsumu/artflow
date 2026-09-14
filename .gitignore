@@ -9,3 +9,5 @@ build/
 dist/
 *.egg-info/
 .artflow-state/
+.artflow-demo/
+design-qa.md

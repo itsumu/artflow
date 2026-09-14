@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run unit and integration tests
+        run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Prove the repository demo needs no site-packages
+        run: python -S examples/run_demo.py --version
+      - name: Check browser JavaScript syntax
+        run: node --check src/artflow/web/app.js
+
+  package:
+    name: Clean wheel and installed smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build from a clean checkout
+        run: python -m pip wheel --no-deps . --wheel-dir dist
+      - name: Reject stale or missing package data
+        run: python scripts/verify_wheel.py dist/artflow-*.whl
+      - name: Install the exact wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/artflow-venv"
+          "$RUNNER_TEMP/artflow-venv/bin/python" -m pip install --no-deps --no-index dist/artflow-*.whl
+      - name: Run the packaged starter end to end
+        run: |
+          ARTFLOW="$RUNNER_TEMP/artflow-venv/bin/artflow"
+          "$ARTFLOW" init "$RUNNER_TEMP/studio"
+          "$ARTFLOW" check --project "$RUNNER_TEMP/studio/project.json"
+          "$ARTFLOW" run --project "$RUNNER_TEMP/studio/project.json" --asset campfire --action build --confirm campfire

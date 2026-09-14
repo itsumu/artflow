@@ -34,33 +34,41 @@ class ProjectTests(unittest.TestCase):
             run = self.project.ledger.get(run["run_id"])
         return run
 
-    def build(self, aid="sun"):
+    def build(self, aid="campfire"):
         plan = self.project.plan(aid, "build")
         return self.wait(self.project.submit(aid, "build", plan["token"], aid))
 
     def edit_pipeline(self, edit):
         path = self.root / "pipelines.json"
         config = json.loads(path.read_text())
-        edit(config["pipelines"]["icon"])
+        edit(config["pipelines"]["sprite"])
         path.write_text(json.dumps(config))
+
+    def recolor_campfire(self):
+        path = self.root / "inputs/campfire.json"
+        recipe = json.loads(path.read_text())
+        recipe["palette"]["Y"] = "#FFF2A8"
+        path.write_text(json.dumps(recipe))
 
     def test_standalone_two_assets_run_and_publish(self):
         self.assertTrue(Adapter(self.root / "project.json").check()["ok"])
-        for aid in ("sun", "moon"):
+        for aid in ("campfire", "crystal"):
             run = self.build(aid)
             self.assertEqual(run["status"], "verified", run)
             self.assertEqual([s["id"] for s in run["steps"]], ["build", "verify"])
-            self.assertTrue(run["approvals"][0]["files"]["brief"])
-            self.assertTrue((self.root / "output" / f"{aid}.svg").is_file())
+            self.assertTrue(run["approvals"][0]["files"]["recipe"])
+            output = self.root / "output" / f"{aid}.png"
+            self.assertTrue(output.is_file())
+            self.assertTrue(output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
             self.assertEqual(self.project.read_asset(aid)["published_state"], "verified")
 
     def test_new_asset_needs_only_config_and_input(self):
         path = self.root / "project.json"
         config = json.loads(path.read_text())
-        config["assets"]["star"] = {"template": "icon", "label": "Star"}
+        config["assets"]["ember"] = {"template": "sprite", "label": "Ember"}
         path.write_text(json.dumps(config))
-        shutil.copy2(self.root / "inputs/sun.json", self.root / "inputs/star.json")
-        self.assertEqual(self.build("star")["status"], "verified")
+        shutil.copy2(self.root / "inputs/campfire.json", self.root / "inputs/ember.json")
+        self.assertEqual(self.build("ember")["status"], "verified")
 
     def test_configuration_drives_real_executor_and_timeout(self):
         calls = []
@@ -71,53 +79,135 @@ class ProjectTests(unittest.TestCase):
         self.project.executor = Fake()
         self.edit_pipeline(lambda p: p["steps"][0].update(command=["verify", "{artifact.image}"], timeout_seconds=7))
         (self.root / "output").mkdir()
-        (self.root / "output/sun.svg").write_text("existing")
-        plan = self.project.plan("sun", "build")
-        self.assertEqual(plan["steps"][0]["argv"][-2:], ["verify", str(self.root / "output/sun.svg")])
-        run = self.wait(self.project.submit("sun", "build", plan["token"], "sun"))
+        (self.root / "output/campfire.png").write_bytes(b"existing")
+        plan = self.project.plan("campfire", "build")
+        self.assertEqual(plan["steps"][0]["argv"][-2:], ["verify", str(self.root / "output/campfire.png")])
+        run = self.wait(self.project.submit("campfire", "build", plan["token"], "campfire"))
         self.assertEqual(run["status"], "verified", run)
-        self.assertEqual(calls[0], (["verify", str(self.root / "output/sun.svg")], 7))
+        self.assertEqual(calls[0], (["verify", str(self.root / "output/campfire.png")], 7))
 
     def test_missing_input_blocks_before_any_run(self):
-        (self.root / "inputs/sun.json").unlink()
-        plan = self.project.plan("sun", "build")
+        (self.root / "inputs/campfire.json").unlink()
+        plan = self.project.plan("campfire", "build")
         self.assertFalse(plan["ok"])
         with self.assertRaises(ProjectError):
-            self.project.submit("sun", "build", plan["token"], "sun")
-        self.assertEqual(self.project.ledger.list("sun"), [])
+            self.project.submit("campfire", "build", plan["token"], "campfire")
+        self.assertEqual(self.project.ledger.list("campfire"), [])
+
+    def test_check_requires_external_inputs_but_allows_future_outputs(self):
+        self.assertFalse((self.root / "output/campfire.png").exists())
+        self.assertTrue(self.project.check()["ok"])
+        (self.root / "inputs/campfire.json").unlink()
+        result = self.project.check()
+        self.assertFalse(result["ok"])
+        error = next(item for item in result["errors"] if item["code"] == "missing_input")
+        self.assertEqual(error["resolved_path"], str(self.root / "inputs/campfire.json"))
+        self.assertTrue(error["hint"])
+
+    def test_check_requires_missing_input_for_in_place_command(self):
+        def make_build_in_place(pipeline):
+            build = pipeline["steps"][0]
+            build["inputs"] = ["recipe"]
+            build["outputs"] = ["recipe"]
+            pipeline["steps"] = [build]
+            pipeline["actions"]["build"]["steps"] = ["build"]
+            pipeline["actions"]["build"]["publish_artifacts"] = ["recipe"]
+            pipeline["actions"] = {"build": pipeline["actions"]["build"]}
+
+        self.edit_pipeline(make_build_in_place)
+        (self.root / "inputs/campfire.json").unlink()
+        result = self.project.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(any(
+            item["asset_id"] == "campfire"
+            and item["code"] == "missing_input"
+            and item["resolved_path"] == str(self.root / "inputs/campfire.json")
+            for item in result["errors"]
+        ))
+
+    def test_check_requires_declared_tool_version_files(self):
+        (self.root / "make_asset.py").unlink()
+        result = self.project.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(any(item["code"] == "missing_version_file" for item in result["errors"]))
+
+    def test_check_resolves_relative_executable_from_executor_cwd(self):
+        tool = self.root / "local_tool"
+        tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+        path = self.root / "project.json"
+        config = json.loads(path.read_text())
+        config["executors"]["python"]["argv"] = ["./local_tool"]
+        config["executors"]["python"]["version_files"] = ["local_tool"]
+        path.write_text(json.dumps(config))
+        result = self.project.check()
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(all(
+            executor["resolved_executable"] == str(tool)
+            for asset in result["assets"]
+            for executor in asset["executors"]
+        ))
+
+    def test_check_rejects_malformed_executor_environment(self):
+        path = self.root / "project.json"
+        config = json.loads(path.read_text())
+        config["executors"]["python"]["env"] = ["NOT_AN_OBJECT"]
+        path.write_text(json.dumps(config))
+        result = self.project.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(any(item["code"] == "invalid_adapter" and ".env" in item["message"]
+                            for item in result["errors"]))
+
+    def test_check_reports_identity_changes_require_restart(self):
+        path = self.root / "project.json"
+        config = json.loads(path.read_text())
+        config["storage"] = ".different-state"
+        path.write_text(json.dumps(config))
+        result = self.project.check()
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["restart_required"])
+        self.assertTrue(any(item["code"] == "restart_required" for item in result["errors"]))
 
     def test_stale_confirmation_and_wrong_confirmation_rejected(self):
-        plan = self.project.plan("sun", "build")
+        plan = self.project.plan("campfire", "build")
         with self.assertRaises(ProjectError):
-            self.project.submit("sun", "build", plan["token"], "moon")
-        (self.root / "inputs/sun.json").write_text('{"shape":"sun","color":"#ffffff"}')
+            self.project.submit("campfire", "build", plan["token"], "crystal")
+        self.recolor_campfire()
         with self.assertRaisesRegex(ProjectError, "changed"):
-            self.project.submit("sun", "build", plan["token"], "sun")
+            self.project.submit("campfire", "build", plan["token"], "campfire")
         self.assertFalse((self.root / "output").exists())
 
     def test_changed_input_invalidates_downstream_and_old_publication(self):
         self.build()
-        (self.root / "inputs/sun.json").write_text('{"shape":"sun","color":"#ffffff"}')
-        data = self.project.read_asset("sun")
+        self.recolor_campfire()
+        data = self.project.read_asset("campfire")
         self.assertEqual(data["step_states"], {"build":"stale", "verify":"stale"})
         self.assertEqual(data["published_state"], "stale")
-        self.assertFalse(self.project.plan("sun", "verify")["ok"])
+        self.assertFalse(self.project.plan("campfire", "verify")["ok"])
         self.assertEqual(self.build()["status"], "verified")
+
+    def test_interrupted_step_invalidates_downstream_result(self):
+        run = self.build()
+        steps = run["steps"]
+        steps[0] = {**steps[0], "status": "interrupted"}
+        self.project.ledger.update(run["run_id"], steps=steps)
+        self.assertEqual(self.project.read_asset("campfire")["step_states"],
+                         {"build": "interrupted", "verify": "stale"})
 
     def test_changing_tool_invalidates_old_results(self):
         self.build()
         with (self.root / "make_asset.py").open("a") as stream:
             stream.write("\n# a new tool version\n")
-        self.assertEqual(self.project.read_asset("sun")["step_states"]["build"], "stale")
+        self.assertEqual(self.project.read_asset("campfire")["step_states"]["build"], "stale")
 
     def test_candidate_like_action_is_durable_without_publishing(self):
         self.edit_pipeline(lambda p: p["actions"].update(candidate={"label":"Candidate","steps":["build"]}))
-        plan = self.project.plan("sun", "candidate")
-        run = self.wait(self.project.submit("sun", "candidate", plan["token"], "sun"))
+        plan = self.project.plan("campfire", "candidate")
+        run = self.wait(self.project.submit("campfire", "candidate", plan["token"], "campfire"))
         self.assertEqual(run["status"], "succeeded")
         self.assertTrue(run["steps"][0]["inputs"])
         self.assertTrue(run["steps"][0]["files"]["image"])
-        self.assertEqual(self.project.read_asset("sun")["published_state"], "not_run")
+        self.assertEqual(self.project.read_asset("campfire")["published_state"], "not_run")
 
     def test_executor_exception_finishes_run_and_releases_lock(self):
         class Broken:
@@ -147,14 +237,21 @@ class ProjectTests(unittest.TestCase):
                 cancelled.wait(5)
                 return {"ok":False,"exit_code":130,"stderr":"cancelled"}
         self.project.executor = Slow()
-        plan = self.project.plan("sun","build")
-        run = self.project.submit("sun","build",plan["token"],"sun")
+        plan = self.project.plan("campfire","build")
+        run = self.project.submit("campfire","build",plan["token"],"campfire")
         self.assertTrue(started.wait(2))
         self.assertTrue(self.project.cancel(run["run_id"])["ok"])
         self.assertEqual(self.wait(run)["status"],"cancelled")
 
+    def test_closed_project_rejects_submit_without_creating_a_run(self):
+        plan = self.project.plan("campfire", "build")
+        self.project.close()
+        with self.assertRaisesRegex(ProjectError, "closing"):
+            self.project.submit("campfire", "build", plan["token"], "campfire")
+        self.assertEqual(self.project.ledger.list("campfire"), [])
+
     def test_provided_previews_all_exist_in_artifact_registry(self):
-        data = self.project.read_asset("sun")
+        data = self.project.read_asset("campfire")
         self.assertTrue(set(data["asset"]["preview"]).issubset({a["id"] for a in data["artifacts"]}))
 
 

@@ -6,11 +6,11 @@ const assert = require("node:assert/strict");
   const errors=[];
   page.on("pageerror", error=>errors.push(error.message));
   await page.goto(process.argv[2] || "http://127.0.0.1:4180");
-  await page.waitForFunction(()=>document.querySelector("#assetTitle").textContent==="太阳");
-  for (const [label,id] of [["太阳","sun"],["月亮","moon"]]) {
+  await page.waitForFunction(()=>document.querySelector("#assetTitle").textContent==="Campfire");
+  for (const [label,id] of [["Campfire","campfire"],["Crystal","crystal"]]) {
     await page.getByRole("button",{name:label,exact:true}).click();
     await page.waitForFunction(label=>document.querySelector("#assetTitle").textContent===label,label);
-    assert.equal(await page.locator("#actionLabel").innerText(),"制作并验证");
+    assert.equal(await page.locator("#actionLabel").innerText(),"Build and verify");
     await page.locator("#runActionButton").click();
     await page.locator("#planDialog").waitFor({state:"visible"});
     await page.locator("#confirmation").fill(id);
@@ -19,8 +19,8 @@ const assert = require("node:assert/strict");
     assert(await page.locator("#previewImage").evaluate(img=>img.complete&&img.naturalWidth>0));
     assert(await page.locator(".step-output-card img").isVisible());
   }
-  await page.getByRole("button",{name:"太阳",exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector("#assetTitle").textContent==="太阳");
+  await page.getByRole("button",{name:"Campfire",exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector("#assetTitle").textContent==="Campfire");
   await page.getByRole("button",{name:"黑",exact:true}).click();
   assert.equal(await page.locator("#previewViewport").getAttribute("data-background"),"black");
   await page.getByRole("button",{name:"放大",exact:true}).click();

@@ -52,6 +52,8 @@ def validate_pipeline_definition(pipeline, artifacts, executors):
                 issue(sid, "retry_policy must be safe or manual")
             if type(step.get("writes")) is not bool:
                 issue(sid, "Explicit writes boolean required")
+            if step.get("outputs") and step.get("writes") is not True:
+                issue(sid, "Steps declaring outputs must set writes to true")
             if step.get("writes"):
                 if step.get("requires_approval") is not True:
                     issue(sid, "Write steps require approval")

@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from . import __version__
 from .model import ProjectError
 from .project import Project
 
@@ -52,10 +53,13 @@ class ArtflowHandler(BaseHTTPRequestHandler):
         parts = [unquote(p) for p in urlparse(self.path).path.strip("/").split("/") if p]
         project = self.server.project
         try:
+            if not post and parts == ["api", "health"]:
+                return self.json({"ok": True, "service": "artflow", "version": __version__,
+                                  "project_id": project.adapter.config["project_id"]})
             if not post and parts == ["api", "project"]:
                 return self.json({**project.assets(), "token": self.server.token})
             if not post and parts == ["api", "check"]:
-                return self.json(project.adapter.check())
+                return self.json(project.check())
             if len(parts) >= 3 and parts[:2] == ["api", "assets"]:
                 aid = parts[2]
                 if not post and len(parts) == 3:
@@ -129,6 +133,7 @@ class ArtflowHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         try:
             self.wfile.write(data)
